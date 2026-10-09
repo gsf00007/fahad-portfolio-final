@@ -152,6 +152,7 @@
         <div class="field"><label>GitHub username</label><input type="text" id="s-owner" value="${esc(s.owner)}"></div>
         <div class="field"><label>Repository name</label><input type="text" id="s-repo" value="${esc(s.repo)}"><small>e.g. yourname.github.io</small></div>
         <div class="field"><label>Branch</label><input type="text" id="s-branch" value="${esc(s.branch)}"></div>
+        <div class="field"><label>Folder inside the repo</label><input type="text" id="s-folder" value="${esc(s.folder)}"><small>Leave empty if index.html is at the top of the repo. If your site address ends in /fahad-portfolio-final/, put fahad-portfolio-final here.</small></div>
         <div class="field"><label>Fine-grained access token</label><input type="text" id="s-token" value="${esc(s.token)}" autocomplete="off" style="-webkit-text-security:disc">
           <small>GitHub → Settings → Developer settings → Fine-grained tokens → only this repository → Contents: Read and write.</small></div>
         <div class="field check"><input type="checkbox" id="s-remember" ${s.remember ? "checked" : ""}><label for="s-remember">Remember the token on this computer</label></div>
@@ -257,17 +258,22 @@
   function settings() {
     let s = {};
     try { s = JSON.parse(store.get("portfolio_settings")) || {}; } catch (e) {}
+    // e.g. https://gsf00007.github.io/fahad-portfolio-final/admin.html
+    //   -> repo "gsf00007.github.io", folder "fahad-portfolio-final"
     const host = location.hostname;
     const guessOwner = host.endsWith(".github.io") ? host.split(".")[0] : "";
-    const seg = location.pathname.split("/").filter(Boolean)[0];
-    const guessRepo = guessOwner ? (seg && !seg.endsWith(".html") ? seg : host) : "";
+    const segs = location.pathname.split("/").filter(Boolean).filter(x => !x.endsWith(".html"));
+    const guessRepo = guessOwner ? host : "";
+    const guessFolder = guessOwner ? segs.join("/") : "";
     return { owner: s.owner || guessOwner, repo: s.repo || guessRepo, branch: s.branch || "main",
+      folder: s.folder ?? guessFolder,
       token: s.token || sessionStorage.getItem("gh_token") || "", remember: !!s.token };
   }
   function saveSettings() {
     const remember = $("s-remember").checked, token = $("s-token").value.trim();
     store.set("portfolio_settings", JSON.stringify({
       owner: $("s-owner").value.trim(), repo: $("s-repo").value.trim(), branch: $("s-branch").value.trim() || "main",
+      folder: $("s-folder").value.trim().replace(/^\/+|\/+$/g, ""),
       token: remember ? token : "" }));
     try { sessionStorage.setItem("gh_token", token); } catch (e) {}
   }
@@ -282,7 +288,7 @@
   $("b-publish").onclick = async () => {
     const s = settings();
     if (!s.owner || !s.repo || !s.token) { tab = "publish"; render(); status("Fill in the publish settings first."); return; }
-    const api = (path) => `https://api.github.com/repos/${s.owner}/${s.repo}/contents/${path}`;
+    const api = (path) => `https://api.github.com/repos/${s.owner}/${s.repo}/contents/${s.folder ? s.folder + "/" : ""}${path}`;
     const url = api("data/portfolio.json");
     const headers = { Authorization: `Bearer ${s.token}`, Accept: "application/vnd.github+json" };
     status("Publishing…");
@@ -316,7 +322,7 @@
       status("✅ Published! The live site updates in about a minute.");
       render();
     } catch (err) {
-      status("❌ Publish failed: " + err.message + " (check username, repo, branch and token)");
+      status("❌ Publish failed: " + err.message + " (check username, repository, branch, folder and token in Publish settings)");
     }
   };
 
